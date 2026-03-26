@@ -8,9 +8,9 @@ import (
 
 	"github.com/avpavlov-cloud/wallet-api/internal/model"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
 
 type Server struct {
 	DbPool *pgxpool.Pool // Или *sql.DB, если используете стандартный драйвер
@@ -92,9 +92,18 @@ func (s *Server) TransferHandler(c *gin.Context) {
 		return
 	}
 
-	tx, err := s.DbPool.Begin(context.Background())
+	// Определяем настройки транзакции
+	txOptions := pgx.TxOptions{
+		IsoLevel:       pgx.RepeatableRead, // Защита от изменения данных в процессе TX
+		AccessMode:     pgx.ReadWrite,      // Разрешаем запись
+		DeferrableMode: pgx.NotDeferrable,
+	}
+
+	// Начинаем транзакцию с заданными опциями
+	tx, err := s.DbPool.BeginTx(context.Background(), txOptions)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "tx failed"})
+		slog.Error("Не удалось начать транзакцию с Repeatable Read", "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	defer tx.Rollback(context.Background())

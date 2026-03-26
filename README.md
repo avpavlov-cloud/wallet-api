@@ -21,7 +21,7 @@ make migrate-down
 
  Перевод денег с одного счёта на другой счёт
  ```bash
- curl -X POST http://localhost:8000/transfer      -H "Content-Type: application/json"      -d '{"from_account_id": 1, "to_account_id": 2, "amount": 50.0}'
+  curl -X POST http://localhost:8000/transfer      -H "Content-Type: application/json"      -d '{"from_account_id": 1, "to_account_id": 2, "amount": 50.0}' -H "X-API-KEY: super-secret-token-123"
  ```
 
  Запрос с авторизациями после включения middleware
