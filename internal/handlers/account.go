@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -37,7 +37,10 @@ func (s *Server) CreateAccountHandler(c *gin.Context) {
 	err := s.DbPool.QueryRow(context.Background(), query, req.OwnerName, req.Balance, req.Currency).Scan(&id, &createdAt)
 
 	if err != nil {
-		log.Printf("Error creating account: %v", err)
+		slog.Error("failed to create account",
+			"error", err,
+			"owner", req.OwnerName,
+		)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create account"})
 		return
 	}
@@ -49,6 +52,8 @@ func (s *Server) CreateAccountHandler(c *gin.Context) {
 		"currency":   req.Currency,
 		"created_at": createdAt,
 	})
+
+	slog.Info("account created successfully", "id", id)
 }
 
 func (s *Server) TransferHandler(c *gin.Context) {

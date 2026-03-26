@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,6 +17,13 @@ import (
 )
 
 func main() {
+	// Настраиваем JSON-обработчик: логи будут выходить в одну строку JSON
+	// nil в опциях означает уровень по умолчанию (Info)
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
+	// Устанавливаем его как глобальный логгер для всего приложения
+	slog.SetDefault(logger)
+
 	dbConnStr := os.Getenv("DB_SOURCE")
 	if dbConnStr == "" {
 		// Это сработает, только если вы запускаете без Докера
@@ -33,7 +40,8 @@ func main() {
 
 	// Проверка связи
 	if err := dbPool.Ping(context.Background()); err != nil {
-		log.Fatalf("Database unreachable: %v", err)
+		logger.Error("Database unreachable", "error", err)
+		os.Exit(1)
 	}
 
 	server := handlers.NewServer(dbPool)
@@ -57,9 +65,10 @@ func main() {
 
 	// Запуск сервера в отдельной горутине
 	go func() {
-		log.Println("Server starting on :8000")
+		slog.Info("Server is starting", "addr", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("listen: %s\n", err)
+			slog.Error("server failed to start", "error", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -68,7 +77,7 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit // Блокировка до получения сигнала (Ctrl+C или docker stop)
 
-	log.Println("Shutting down server...")
+	slog.Info("shutting down server...")
 
 	// Контекст ожидания завершения (5 секунд)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -76,8 +85,9 @@ func main() {
 
 	// Останавливаем HTTP сервер
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatal("Server forced to shutdown:", err)
+		slog.Error("server forced to shutdown", "error", err)
+		os.Exit(1)
 	}
 
-	log.Println("Server exiting gracefully")
+	slog.Info("server exiting gracefully")
 }
