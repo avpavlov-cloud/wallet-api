@@ -8,16 +8,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/avpavlov-cloud/wallet-api/internal/model"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-// Модель данных для входящего JSON (с валидацией Gin)
-type CreateAccountRequest struct {
-	OwnerName string  `json:"owner_name" binding:"required"`
-	Currency  string  `json:"currency" binding:"required,oneof=USD EUR RUB"`
-	Balance   float64 `json:"balance" binding:"required,gte=0"`
-}
 
 func main() {
 	dbConnStr := os.Getenv("DB_SOURCE")
@@ -44,7 +38,7 @@ func main() {
 
 	// Эндпоинт создания счета
 	r.POST("/accounts", func(c *gin.Context) {
-		var req CreateAccountRequest
+		var req model.CreateAccountRequest
 		// Валидация JSON
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -74,14 +68,8 @@ func main() {
 		})
 	})
 
-	type TransferRequest struct {
-		FromAccountID int64   `json:"from_account_id" binding:"required"`
-		ToAccountID   int64   `json:"to_account_id" binding:"required"`
-		Amount        float64 `json:"amount" binding:"required,gt=0"`
-	}
-
 	r.POST("/transfer", func(c *gin.Context) {
-		var req TransferRequest
+		var req model.TransferRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
@@ -144,6 +132,61 @@ func main() {
 		}
 
 		c.JSON(http.StatusOK, gin.H{"message": "transfer successful"})
+	})
+
+	r.GET("/accounts/:id", func(c *gin.Context) {
+		id := c.Param("id")
+
+		// Используем транзакцию только для чтения (Read Committed),
+		// чтобы гарантировать Консистентность (C)
+		tx, err := dbPool.Begin(context.Background())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+			return
+		}
+		defer tx.Rollback(context.Background())
+
+		// 1. Получаем данные счета
+		var acc model.Account
+		err = tx.QueryRow(context.Background(),
+			"SELECT id, owner_name, balance, currency, created_at FROM accounts WHERE id = $1", id).
+			Scan(&acc.ID, &acc.OwnerName, &acc.Balance, &acc.Currency, &acc.CreatedAt)
+
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "account not found"})
+			return
+		}
+
+		// 2. Получаем последние 5 транзакций (где этот счет был отправителем или получателем)
+		rows, err := tx.Query(context.Background(), `
+        SELECT id, from_account_id, to_account_id, amount, created_at 
+        FROM transactions 
+        WHERE from_account_id = $1 OR to_account_id = $1 
+        ORDER BY created_at DESC 
+        LIMIT 5`, id)
+
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch transactions"})
+			return
+		}
+		defer rows.Close()
+
+		var history []gin.H
+		for rows.Next() {
+			var tid, from, to int64
+			var amt float64
+			var cat string
+			if err := rows.Scan(&tid, &from, &to, &amt, &cat); err == nil {
+				history = append(history, gin.H{
+					"id": tid, "from": from, "to": to, "amount": amt, "at": cat,
+				})
+			}
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"account": acc,
+			"history": history,
+		})
 	})
 
 	// 3. Запуск сервера
