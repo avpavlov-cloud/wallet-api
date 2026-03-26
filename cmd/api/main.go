@@ -18,12 +18,18 @@ import (
 	_ "github.com/avpavlov-cloud/wallet-api/docs"
 	swaggerFiles "github.com/swaggo/files"     // статические файлы Swagger UI
 	ginSwagger "github.com/swaggo/gin-swagger" // адаптер для Gin
+	ginprometheus "github.com/zsais/go-gin-prometheus"
 )
 
 func SetupRouter(pool *pgxpool.Pool) *gin.Engine {
 	server := handlers.NewServer(pool)
 	// 2. Инициализация Gin
-	r := gin.Default()
+	r := gin.New()
+
+	// Инициализация экспортера метрик
+	p := ginprometheus.NewPrometheus("gin")
+	p.Use(r)
+
 	r.Use(gin.Recovery())
 	r.Use(middleware.JSONLogger())
 
