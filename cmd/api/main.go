@@ -175,7 +175,7 @@ func main() {
 		for rows.Next() {
 			var tid, from, to int64
 			var amt float64
-			var cat string
+			var cat time.Time
 			if err := rows.Scan(&tid, &from, &to, &amt, &cat); err == nil {
 				history = append(history, gin.H{
 					"id": tid, "from": from, "to": to, "amount": amt, "at": cat,
