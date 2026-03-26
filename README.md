@@ -75,3 +75,8 @@ docker exec -it wallet-api-postgres-1 psql -U user -d wallet_db -c "SELECT id, o
 ```bash
  docker exec -it wallet-api-postgres-1 psql -U user -d wallet_db -c "SELECT id, event_type, payload, status, created_at FROM outbox_events ORDER BY created_at DESC
 ```
+
+Просмотреть структуру таблицы `output_events` с GIN-индексами
+```bash
+docker exec -it wallet-api-postgres-1 psql -U user -d wallet_db -c "\d outbox_events"
+```

@@ -19,4 +19,11 @@ test-coverage:
 
 # Создание новой миграции. Использование: make migrate-create name=add_idempotency_key
 migrate-create:
-	docker run --rm -v $(shell pwd)/migrations:/migrations migrate/migrate create -ext sql -dir /migrations/ -seq $(name)
+	@if [ -z "$(name)" ]; then \
+		echo "Ошибка: укажите имя миграции. Пример: make migrate-create name=my_migration"; \
+		exit 1; \
+	fi
+	docker run --rm \
+		-v $(shell pwd)/migrations:/migrations \
+		--user $(shell id -u):$(shell id -g) \
+		migrate/migrate create -ext sql -dir /migrations/ -seq $(name)
