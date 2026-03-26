@@ -48,7 +48,7 @@ func (s *Server) CreateAccountHandler(c *gin.Context) {
 
 	var id int64
 	var createdAt time.Time
-	err := s.DbPool.QueryRow(context.Background(), query, req.OwnerName, req.Balance, req.Currency).Scan(&id, &createdAt)
+	err := s.DbPool.QueryRow(c.Request.Context(), query, req.OwnerName, req.Balance, req.Currency).Scan(&id, &createdAt)
 
 	if err != nil {
 		slog.Error("failed to create account",

@@ -16,3 +16,7 @@ test-coverage:
 	docker compose exec app go test -v -coverprofile=coverage.out ./...
 	# Превращаем бинарный отчет в HTML (опционально, если есть go локально)
 	go tool cover -html=coverage.out -o coverage.html
+
+# Создание новой миграции. Использование: make migrate-create name=add_idempotency_key
+migrate-create:
+	docker run --rm -v $(shell pwd)/migrations:/migrations migrate/migrate create -ext sql -dir /migrations/ -seq $(name)
