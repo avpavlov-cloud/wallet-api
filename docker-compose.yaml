@@ -52,6 +52,11 @@ services:
       timeout: 5s
       retries: 3
       start_period: 5s  
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"   # Максимальный размер одного файла лога
+        max-file: "3"     # Хранить не более 3-х последних файлов  
     env_file:
       - .env 
     ports:
