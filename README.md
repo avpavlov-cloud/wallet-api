@@ -54,3 +54,14 @@ make test-coverage
 ```bash
 swag init -g cmd/api/main.go --parseDependency --parseInternal
 ```
+
+Проверка Rate Limit
+```bash
+for i in {1..10}; do 
+  curl -s -o /dev/null -w "Запрос $i: %{http_code}\n" \
+  -X POST http://localhost:8000/transfer \
+  -H "Content-Type: application/json" \
+  -H "X-API-KEY: super-secret-token-123" \
+  -d '{"from_account_id": 1, "to_account_id": 2, "amount": 1.0, "idempotency_key": "uuid-'$i'"}'
+done
+```

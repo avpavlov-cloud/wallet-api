@@ -14,33 +14,37 @@ import (
 	"github.com/avpavlov-cloud/wallet-api/internal/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	ginprometheus "github.com/zsais/go-gin-prometheus"
 
 	_ "github.com/avpavlov-cloud/wallet-api/docs"
 	swaggerFiles "github.com/swaggo/files"     // статические файлы Swagger UI
 	ginSwagger "github.com/swaggo/gin-swagger" // адаптер для Gin
-	ginprometheus "github.com/zsais/go-gin-prometheus"
 )
 
 func SetupRouter(pool *pgxpool.Pool) *gin.Engine {
 	server := handlers.NewServer(pool)
-	// 2. Инициализация Gin
-	r := gin.New()
-
-	// Инициализация экспортера метрик
+	r := gin.Default()
 	p := ginprometheus.NewPrometheus("gin")
 	p.Use(r)
+	
+	// 1. ПУБЛИЧНЫЕ РОУТЫ (Без авторизации)
+	// Swagger должен быть доступен всем
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	r.Use(gin.Recovery())
-	r.Use(middleware.JSONLogger())
+	// 2. ЗАЩИЩЕННЫЕ РОУТЫ
+	authGroup := r.Group("/")
 
-	protected := r.Group("/")
-	protected.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	// Сначала авторизация, потом лимитер
+	authGroup.Use(middleware.AuthMiddleware())
 
-	protected.Use(middleware.AuthMiddleware())
+	limiter := middleware.NewIPlimiter()
+	authGroup.Use(middleware.RateLimitMiddleware(limiter))
+
 	{
-		protected.POST("/accounts", server.CreateAccountHandler)
-		protected.POST("/transfer", server.TransferHandler)
-		protected.GET("/accounts/:id", server.GetAccountHandlerfunc)
+		// Используем именно authGroup, чтобы работали Middleware
+		authGroup.POST("/accounts", server.CreateAccountHandler)
+		authGroup.POST("/transfer", server.TransferHandler)
+		authGroup.GET("/accounts/:id", server.GetAccountHandlerfunc)
 	}
 
 	return r
