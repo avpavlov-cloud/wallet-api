@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/avpavlov-cloud/wallet-api/internal/handlers"
+	"github.com/avpavlov-cloud/wallet-api/internal/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -40,13 +41,13 @@ func main() {
 	// 2. Инициализация Gin
 	r := gin.Default()
 
-	// Эндпоинт создания счета
-	r.POST("/accounts", server.CreateAccountHandler)
-
-	r.POST("/transfer", server.TransferHandler)
-
-	r.GET("/accounts/:id", server.GetAccountHandlerfunc)
-
+	protected := r.Group("/")
+	protected.Use(middleware.AuthMiddleware())
+	{
+		protected.POST("/accounts", server.CreateAccountHandler)
+		protected.POST("/transfer", server.TransferHandler)
+		protected.GET("/accounts/:id", server.GetAccountHandlerfunc)
+	}
 	// --- GRACEFUL SHUTDOWN LOGIC ---
 
 	srv := &http.Server{

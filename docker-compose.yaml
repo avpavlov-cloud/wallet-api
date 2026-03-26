@@ -30,20 +30,16 @@ services:
         condition: service_healthy
 
 
-
-  # 3. Приложение с Air
   app:
     build:
       context: .
       dockerfile: Dockerfile.dev
+    env_file:
+      - .env 
     ports:
       - "8000:8000"
-    environment:
-      - DB_SOURCE=postgres://user:password@postgres:5432/wallet_db?sslmode=disable
     volumes:
       - .:/app
     depends_on:
       postgres:
         condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
