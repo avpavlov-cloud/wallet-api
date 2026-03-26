@@ -5,7 +5,7 @@ tmp_dir = "tmp"
 [build]
   # Команда сборки (добавляем флаги для отладки)
   bin = "./tmp/main"
-  cmd = "go build -o ./tmp/main main.go"
+  cmd = "go build -o ./tmp/main cmd/api/main.go"
   delay = 1000
   exclude_dir = ["assets", "tmp", "vendor", "testdata", "migrations"]
   include_ext = ["go", "tpl", "tmpl", "html", "yaml", "toml"]
