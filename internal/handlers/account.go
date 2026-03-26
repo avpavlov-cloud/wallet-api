@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -117,6 +118,22 @@ func (s *Server) runTransferTx(ctx context.Context, req model.TransferRequest) e
 			return fmt.Errorf("duplicate transaction: %w", err)
 		}
 		return err
+	}
+
+	// Внутри runTransferTx, перед tx.Commit(ctx)
+	eventPayload := map[string]interface{}{
+		"from":   req.FromAccountID,
+		"to":     req.ToAccountID,
+		"amount": req.Amount,
+	}
+	payloadJSON, _ := json.Marshal(eventPayload)
+
+	_, err = tx.Exec(ctx,
+		"INSERT INTO outbox_events (event_type, payload) VALUES ($1, $2)",
+		"transfer_completed", payloadJSON)
+
+	if err != nil {
+		return err // Если лог события не записался, вся транзакция откатится
 	}
 
 	return tx.Commit(ctx)

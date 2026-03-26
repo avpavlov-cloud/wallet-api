@@ -19,7 +19,7 @@ make migrate-down
  docker compose logs app --tail 20
  ```
 
- Перевод денег с одного счёта на другой счёт
+ Перевод денег с одного счёта на другой счёт. Обязательно UUID
  ```bash
 curl -X POST http://localhost:8000/transfer      -H "Content-Type: application/json"      -H "X-API-KEY: super-secret-token-123"      -d '{
        "from_account_id": 1, 
@@ -64,4 +64,14 @@ for i in {1..10}; do
   -H "X-API-KEY: super-secret-token-123" \
   -d '{"from_account_id": 1, "to_account_id": 2, "amount": 1.0, "idempotency_key": "uuid-'$i'"}'
 done
+```
+
+Проверка счетов
+```bash
+docker exec -it wallet-api-postgres-1 psql -U user -d wallet_db -c "SELECT id, owner_name, balance, currency FROM accounts ORDER BY id;"
+```
+
+Уведомление о переводе денег
+```bash
+ docker exec -it wallet-api-postgres-1 psql -U user -d wallet_db -c "SELECT id, event_type, payload, status, created_at FROM outbox_events ORDER BY created_at DESC
 ```
