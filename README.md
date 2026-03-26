@@ -44,3 +44,8 @@ docker compose exec app go test -v ./...
 ```bash
 make test-coverage
 ```
+
+Генерация swagger
+```bash
+swag init -g cmd/api/main.go --parseDependency --parseInternal
+```

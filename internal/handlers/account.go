@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+
 type Server struct {
 	DbPool *pgxpool.Pool // Или *sql.DB, если используете стандартный драйвер
 }
@@ -20,6 +21,17 @@ func NewServer(db *pgxpool.Pool) *Server {
 	return &Server{DbPool: db}
 }
 
+// CreateAccountHandler godoc
+// @Summary      Создать новый счет
+// @Description  Создает банковский счет для пользователя с начальным балансом
+// @Tags         accounts
+// @Accept       json
+// @Produce      json
+// @Param        request body model.CreateAccountRequest true "Данные для создания счета"
+// @Success      201  {object}  map[string]interface{} "Успешное создание"
+// @Failure      400  {object}  map[string]string      "Ошибка валидации"
+// @Failure      500  {object}  map[string]string      "Внутренняя ошибка сервера"
+// @Router       /accounts [post]
 func (s *Server) CreateAccountHandler(c *gin.Context) {
 	var req model.CreateAccountRequest
 	// Валидация JSON
@@ -56,6 +68,17 @@ func (s *Server) CreateAccountHandler(c *gin.Context) {
 	slog.Info("account created successfully", "id", id)
 }
 
+// TransferHandler godoc
+// @Summary      Перевод денежных средств
+// @Description  Выполняет перевод денег между двумя счетами в рамках одной транзакции
+// @Tags         transfers
+// @Accept       json
+// @Produce      json
+// @Param        request body model.TransferRequest true "Данные перевода"
+// @Success      200  {object}  map[string]string "Успешный перевод"
+// @Failure      400  {object}  map[string]string "Недостаточно средств или неверные ID"
+// @Failure      500  {object}  map[string]string "Ошибка транзакции"
+// @Router       /transfer [post]
 func (s *Server) TransferHandler(c *gin.Context) {
 	var req model.TransferRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -122,6 +145,17 @@ func (s *Server) TransferHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "transfer successful"})
 }
 
+// GetAccountHandlerfunc godoc
+// @Summary      Получить информацию о счете
+// @Description  Возвращает данные счета и историю последних 5 транзакций
+// @Tags         accounts
+// @Accept       json
+// @Produce      json
+// @Param        id   path      int  true  "ID счета"
+// @Success      200  {object}  map[string]interface{} "Данные счета и история"
+// @Failure      404  {object}  map[string]string      "Счет не найден"
+// @Failure      500  {object}  map[string]string      "Ошибка базы данных"
+// @Router       /accounts/{id} [get]
 func (s *Server) GetAccountHandlerfunc(c *gin.Context) {
 	id := c.Param("id")
 

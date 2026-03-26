@@ -1,0 +1,141 @@
+definitions:
+  github_com_avpavlov-cloud_wallet-api_internal_model.CreateAccountRequest:
+    properties:
+      balance:
+        minimum: 0
+        type: number
+      currency:
+        enum:
+        - USD
+        - EUR
+        - RUB
+        type: string
+      owner_name:
+        type: string
+    required:
+    - balance
+    - currency
+    - owner_name
+    type: object
+  github_com_avpavlov-cloud_wallet-api_internal_model.TransferRequest:
+    properties:
+      amount:
+        type: number
+      from_account_id:
+        type: integer
+      to_account_id:
+        type: integer
+    required:
+    - amount
+    - from_account_id
+    - to_account_id
+    type: object
+info:
+  contact: {}
+paths:
+  /accounts:
+    post:
+      consumes:
+      - application/json
+      description: Создает банковский счет для пользователя с начальным балансом
+      parameters:
+      - description: Данные для создания счета
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_avpavlov-cloud_wallet-api_internal_model.CreateAccountRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Успешное создание
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Ошибка валидации
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Создать новый счет
+      tags:
+      - accounts
+  /accounts/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает данные счета и историю последних 5 транзакций
+      parameters:
+      - description: ID счета
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Данные счета и история
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Счет не найден
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Ошибка базы данных
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Получить информацию о счете
+      tags:
+      - accounts
+  /transfer:
+    post:
+      consumes:
+      - application/json
+      description: Выполняет перевод денег между двумя счетами в рамках одной транзакции
+      parameters:
+      - description: Данные перевода
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_avpavlov-cloud_wallet-api_internal_model.TransferRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Успешный перевод
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Недостаточно средств или неверные ID
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Ошибка транзакции
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Перевод денежных средств
+      tags:
+      - transfers
+swagger: "2.0"

@@ -14,6 +14,10 @@ import (
 	"github.com/avpavlov-cloud/wallet-api/internal/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	_ "github.com/avpavlov-cloud/wallet-api/docs"
+	swaggerFiles "github.com/swaggo/files"     // статические файлы Swagger UI
+	ginSwagger "github.com/swaggo/gin-swagger" // адаптер для Gin
 )
 
 func SetupRouter(pool *pgxpool.Pool) *gin.Engine {
@@ -22,7 +26,10 @@ func SetupRouter(pool *pgxpool.Pool) *gin.Engine {
 	r := gin.Default()
 	r.Use(gin.Recovery())
 	r.Use(middleware.JSONLogger())
+
 	protected := r.Group("/")
+	protected.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
 	protected.Use(middleware.AuthMiddleware())
 	{
 		protected.POST("/accounts", server.CreateAccountHandler)
