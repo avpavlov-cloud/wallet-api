@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -46,6 +47,9 @@ func SetupRouter(pool *pgxpool.Pool) *gin.Engine {
 		authGroup.POST("/accounts", server.CreateAccountHandler)
 		authGroup.POST("/transfer", server.TransferHandler)
 		authGroup.GET("/accounts/:id", server.GetAccountHandlerfunc)
+
+		// НОВЫЙ РОУТ: Аналитический отчет
+		authGroup.GET("/reports/volume", server.GetVolumeReportHandler)
 	}
 
 	return r
@@ -81,6 +85,22 @@ func main() {
 		logger.Error("Database unreachable", "error", err)
 		os.Exit(1)
 	}
+
+	// ФОНОВЫЙ ВОРКЕР (Background Process)
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		for range ticker.C {
+			// Используем фоновый контекст с таймаутом
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+
+			// Вызываем REFRESH MATERIALIZED VIEW
+			_, err := dbPool.Exec(ctx, "REFRESH MATERIALIZED VIEW CONCURRENTLY daily_volume_report")
+			if err != nil {
+				log.Printf("Ошибка обновления отчета: %v", err)
+			}
+			cancel()
+		}
+	}()
 
 	r := SetupRouter(dbPool) // Используем общую настройку
 	// --- GRACEFUL SHUTDOWN LOGIC ---
