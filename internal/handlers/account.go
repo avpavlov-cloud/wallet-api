@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/avpavlov-cloud/wallet-api/internal/model"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -68,6 +70,53 @@ func (s *Server) CreateAccountHandler(c *gin.Context) {
 	slog.Info("account created successfully", "id", id)
 }
 
+func (s *Server) runTransferTx(ctx context.Context, req model.TransferRequest) error {
+	txOptions := pgx.TxOptions{
+		IsoLevel:   pgx.RepeatableRead,
+		AccessMode: pgx.ReadWrite,
+	}
+
+	tx, err := s.DbPool.BeginTx(ctx, txOptions)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	// Сортировка для защиты от Deadlock
+	firstID, secondID := req.FromAccountID, req.ToAccountID
+	if firstID > secondID {
+		firstID, secondID = secondID, firstID
+	}
+
+	// Явная блокировка строк
+	if _, err := tx.Exec(ctx, "SELECT id FROM accounts WHERE id = $1 FOR UPDATE", firstID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, "SELECT id FROM accounts WHERE id = $1 FOR UPDATE", secondID); err != nil {
+		return err
+	}
+
+	// Списание
+	res, err := tx.Exec(ctx, "UPDATE accounts SET balance = balance - $1 WHERE id = $2 AND balance >= $1", req.Amount, req.FromAccountID)
+	if err != nil || res.RowsAffected() == 0 {
+		return fmt.Errorf("insufficient funds or sender error")
+	}
+
+	// Зачисление
+	res, err = tx.Exec(ctx, "UPDATE accounts SET balance = balance + $1 WHERE id = $2", req.Amount, req.ToAccountID)
+	if err != nil || res.RowsAffected() == 0 {
+		return fmt.Errorf("receiver error")
+	}
+
+	// Лог
+	_, err = tx.Exec(ctx, "INSERT INTO transactions (from_account_id, to_account_id, amount) VALUES ($1, $2, $3)", req.FromAccountID, req.ToAccountID, req.Amount)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
 // TransferHandler godoc
 // @Summary      Перевод денежных средств
 // @Description  Выполняет перевод денег между двумя счетами в рамках одной транзакции
@@ -86,72 +135,44 @@ func (s *Server) TransferHandler(c *gin.Context) {
 		return
 	}
 
-	// Защита от перевода самому себе
 	if req.FromAccountID == req.ToAccountID {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot transfer to the same account"})
 		return
 	}
 
-	// Определяем настройки транзакции
-	txOptions := pgx.TxOptions{
-		IsoLevel:       pgx.RepeatableRead, // Защита от изменения данных в процессе TX
-		AccessMode:     pgx.ReadWrite,      // Разрешаем запись
-		DeferrableMode: pgx.NotDeferrable,
+	const maxRetries = 3
+	var err error
+
+	for i := 0; i < maxRetries; i++ {
+		err = s.runTransferTx(c.Request.Context(), req)
+
+		if err == nil {
+			c.JSON(http.StatusOK, gin.H{"message": "transfer successful"})
+			return
+		}
+
+		// Проверяем, является ли ошибка конфликтом сериализации (40001)
+		if isSerializationError(err) {
+			slog.Warn("Retry transfer due to serialization conflict", "attempt", i+1, "from", req.FromAccountID)
+			time.Sleep(time.Millisecond * 50) // Небольшая пауза перед повтором
+			continue
+		}
+
+		// Если это ошибка бизнес-логики (нет денег), выходим из цикла сразу
+		break
 	}
 
-	// Начинаем транзакцию с заданными опциями
-	tx, err := s.DbPool.BeginTx(context.Background(), txOptions)
-	if err != nil {
-		slog.Error("Не удалось начать транзакцию с Repeatable Read", "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
-		return
+	// Если мы здесь, значит все попытки провалены или ошибка фатальна
+	slog.Error("Transfer finally failed", "error", err)
+	c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+}
+
+// Вспомогательная функция проверки кода ошибки
+func isSerializationError(err error) bool {
+	if pgErr, ok := err.(*pgconn.PgError); ok {
+		return pgErr.Code == "40001"
 	}
-	defer tx.Rollback(context.Background())
-
-	// --- МЕХАНИЗМ СОРТИРОВКИ ID ---
-	firstID, secondID := req.FromAccountID, req.ToAccountID
-	if firstID > secondID {
-		firstID, secondID = secondID, firstID
-	}
-
-	// Сначала блокируем (SELECT FOR UPDATE) "меньший" ID, затем "больший"
-	// Это гарантирует, что любая другая транзакция по этим ID пойдет по тому же пути
-	_, err = tx.Exec(context.Background(), "SELECT id FROM accounts WHERE id = $1 FOR UPDATE", firstID)
-	_, err = tx.Exec(context.Background(), "SELECT id FROM accounts WHERE id = $1 FOR UPDATE", secondID)
-	// ------------------------------
-
-	// Теперь выполняем саму логику списания/зачисления
-	// Снимаем деньги
-	res, err := tx.Exec(context.Background(),
-		"UPDATE accounts SET balance = balance - $1 WHERE id = $2 AND balance >= $1",
-		req.Amount, req.FromAccountID)
-
-	if err != nil || res.RowsAffected() == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "insufficient funds or sender error"})
-		return
-	}
-
-	// Зачисляем деньги
-	res, err = tx.Exec(context.Background(),
-		"UPDATE accounts SET balance = balance + $1 WHERE id = $2",
-		req.Amount, req.ToAccountID)
-
-	if err != nil || res.RowsAffected() == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "receiver error"})
-		return
-	}
-
-	// Записываем лог
-	_, _ = tx.Exec(context.Background(),
-		"INSERT INTO transactions (from_account_id, to_account_id, amount) VALUES ($1, $2, $3)",
-		req.FromAccountID, req.ToAccountID, req.Amount)
-
-	if err := tx.Commit(context.Background()); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "commit failed"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "transfer successful"})
+	return false
 }
 
 // GetAccountHandlerfunc godoc
