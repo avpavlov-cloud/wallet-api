@@ -1,5 +1,7 @@
 version: '3.8'
+
 services:
+  # 1. База данных
   postgres:
     image: postgres:15-alpine
     environment:
@@ -8,14 +10,36 @@ services:
       POSTGRES_DB: wallet_db
     ports:
       - "5432:5432"
+    healthcheck: # Добавляем проверку готовности базы
+      test: ["CMD-SHELL", "pg_isready -U user -d wallet_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 2. Миграции
+  migrate:
+    image: migrate/migrate
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/migrations
+    # Ждем, пока postgres станет "healthy"
+    command: -path=/migrations/ -database "postgres://user:password@postgres:5432/wallet_db?sslmode=disable" up
+    depends_on:
+      postgres:
+        condition: service_healthy
 
-  adminer:
-    image: adminer
-    restart: always
+  # 3. Приложение с Air
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
     ports:
-      - "8080:8080"
-
-volumes:
-  postgres_data:
+      - "8000:8000"
+    environment:
+      - DB_SOURCE=postgres://user:password@postgres:5432/wallet_db?sslmode=disable
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully

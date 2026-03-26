@@ -1,0 +1,16 @@
+FROM golang:1.25-alpine
+
+RUN apk add --no-cache git
+
+WORKDIR /app
+
+# Устанавливаем Air (live reload)
+RUN go install github.com/cosmtrek/air@v1.49.0
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+# Полный путь к бинарнику Air
+CMD ["/go/bin/air", "-c", ".air.toml"]
