@@ -16,16 +16,20 @@ services:
       timeout: 5s
       retries: 5
 
-  # 2. Миграции
   migrate:
     image: migrate/migrate
     volumes:
       - ./migrations:/migrations
-    # Ждем, пока postgres станет "healthy"
-    command: -path=/migrations/ -database "postgres://user:password@postgres:5432/wallet_db?sslmode=disable" up
+    # Прописываем всё прямо в команду без лишних переменных
+    command: 
+      - -path=/migrations/ 
+      - -database=postgres://user:password@postgres:5432/wallet_db?sslmode=disable 
+      - up
     depends_on:
       postgres:
         condition: service_healthy
+
+
 
   # 3. Приложение с Air
   app:
