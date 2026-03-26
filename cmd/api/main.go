@@ -13,6 +13,7 @@ import (
 	"github.com/avpavlov-cloud/wallet-api/internal/handlers"
 	"github.com/avpavlov-cloud/wallet-api/internal/middleware"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	ginprometheus "github.com/zsais/go-gin-prometheus"
 
@@ -26,7 +27,7 @@ func SetupRouter(pool *pgxpool.Pool) *gin.Engine {
 	r := gin.Default()
 	p := ginprometheus.NewPrometheus("gin")
 	p.Use(r)
-	
+
 	// 1. ПУБЛИЧНЫЕ РОУТЫ (Без авторизации)
 	// Swagger должен быть доступен всем
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
@@ -64,8 +65,11 @@ func main() {
 		dbConnStr = "postgres://user:password@localhost:5432/wallet_db?sslmode=disable"
 	}
 
+	config, _ := pgxpool.ParseConfig(os.Getenv("DB_SOURCE"))
+	config.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeCacheStatement
+
 	// Используем пул соединений для высокой нагрузки
-	dbPool, err := pgxpool.New(context.Background(), dbConnStr)
+	dbPool, err := pgxpool.NewWithConfig(context.Background(), config)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
 		os.Exit(1)
