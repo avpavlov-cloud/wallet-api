@@ -48,7 +48,8 @@ func main() {
 
 	// 2. Инициализация Gin
 	r := gin.Default()
-
+	r.Use(gin.Recovery())
+	r.Use(middleware.JSONLogger())
 	protected := r.Group("/")
 	protected.Use(middleware.AuthMiddleware())
 	{
@@ -56,6 +57,7 @@ func main() {
 		protected.POST("/transfer", server.TransferHandler)
 		protected.GET("/accounts/:id", server.GetAccountHandlerfunc)
 	}
+
 	// --- GRACEFUL SHUTDOWN LOGIC ---
 
 	srv := &http.Server{
