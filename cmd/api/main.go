@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/avpavlov-cloud/wallet-api/internal/model"
@@ -189,7 +191,36 @@ func main() {
 		})
 	})
 
-	// 3. Запуск сервера
-	log.Println("Server starting on :8000")
-	r.Run(":8000")
+	// --- GRACEFUL SHUTDOWN LOGIC ---
+
+	srv := &http.Server{
+		Addr:    ":8000",
+		Handler: r,
+	}
+
+	// Запуск сервера в отдельной горутине
+	go func() {
+		log.Println("Server starting on :8000")
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("listen: %s\n", err)
+		}
+	}()
+
+	// Канал для системных сигналов
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit // Блокировка до получения сигнала (Ctrl+C или docker stop)
+
+	log.Println("Shutting down server...")
+
+	// Контекст ожидания завершения (5 секунд)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Останавливаем HTTP сервер
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatal("Server forced to shutdown:", err)
+	}
+
+	log.Println("Server exiting gracefully")
 }
