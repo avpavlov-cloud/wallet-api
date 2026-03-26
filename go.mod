@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/gin-gonic/gin v1.12.0
+	github.com/go-playground/assert/v2 v2.2.0
 	github.com/jackc/pgx/v5 v5.9.1
 )
 

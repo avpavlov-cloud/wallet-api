@@ -7,3 +7,6 @@ migrate-up:
 
 migrate-down:
 	docker compose run --rm migrate -path=/migrations/ -database "$(DB_URL)" down 1
+
+test:
+	docker compose run --rm app go test -v ./...

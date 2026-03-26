@@ -16,6 +16,23 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+func SetupRouter(pool *pgxpool.Pool) *gin.Engine {
+	server := handlers.NewServer(pool)
+	// 2. Инициализация Gin
+	r := gin.Default()
+	r.Use(gin.Recovery())
+	r.Use(middleware.JSONLogger())
+	protected := r.Group("/")
+	protected.Use(middleware.AuthMiddleware())
+	{
+		protected.POST("/accounts", server.CreateAccountHandler)
+		protected.POST("/transfer", server.TransferHandler)
+		protected.GET("/accounts/:id", server.GetAccountHandlerfunc)
+	}
+
+	return r
+}
+
 func main() {
 	// Настраиваем JSON-обработчик: логи будут выходить в одну строку JSON
 	// nil в опциях означает уровень по умолчанию (Info)
@@ -44,20 +61,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	server := handlers.NewServer(dbPool)
-
-	// 2. Инициализация Gin
-	r := gin.Default()
-	r.Use(gin.Recovery())
-	r.Use(middleware.JSONLogger())
-	protected := r.Group("/")
-	protected.Use(middleware.AuthMiddleware())
-	{
-		protected.POST("/accounts", server.CreateAccountHandler)
-		protected.POST("/transfer", server.TransferHandler)
-		protected.GET("/accounts/:id", server.GetAccountHandlerfunc)
-	}
-
+	r := SetupRouter(dbPool) // Используем общую настройку
 	// --- GRACEFUL SHUTDOWN LOGIC ---
 
 	srv := &http.Server{

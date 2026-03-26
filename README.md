@@ -29,8 +29,13 @@ make migrate-down
 curl http://localhost:8000/accounts/1      -H "X-API-KEY: super-secret-token-123"
 {"account":{"id":1,"owner_name":"Aleksey","balance":850,"currency":"USD","created_at":"2026-03-26T07:03:54.291795Z"},"history":[{"amount":50,"at":"2026-03-26T07:48:36.954406Z","from":1,"id":3,"to":2},{"amount":50,"at":"2026-03-26T07:33:14.026734Z","from":1,"id":2,"to":2},{"amount":50,"at":"2026-03-26T07:28:52.577251Z","from":1,"id":1,"to":2}]}
 ```  
-   
+
 Посмотреть логи относящиеся только к приложению
 ```bash
 docker compose logs -f app
+```
+
+Выполнение тестов
+```bash
+docker compose exec app go test -v ./...
 ```
