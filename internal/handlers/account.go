@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/avpavlov-cloud/wallet-api/internal/model"
@@ -109,8 +110,12 @@ func (s *Server) runTransferTx(ctx context.Context, req model.TransferRequest) e
 	}
 
 	// Лог
-	_, err = tx.Exec(ctx, "INSERT INTO transactions (from_account_id, to_account_id, amount) VALUES ($1, $2, $3)", req.FromAccountID, req.ToAccountID, req.Amount)
+	_, err = tx.Exec(ctx, "INSERT INTO transactions (from_account_id, to_account_id, amount, idempotency_key) VALUES ($1, $2, $3, $4)", req.FromAccountID, req.ToAccountID, req.Amount, req.IdempotencyKey)
 	if err != nil {
+		// Проверяем, не является ли ошибка дубликатом ключа (код 23505)
+		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == "23505" {
+			return fmt.Errorf("duplicate transaction: %w", err)
+		}
 		return err
 	}
 
@@ -156,6 +161,11 @@ func (s *Server) TransferHandler(c *gin.Context) {
 			slog.Warn("Retry transfer due to serialization conflict", "attempt", i+1, "from", req.FromAccountID)
 			time.Sleep(time.Millisecond * 50) // Небольшая пауза перед повтором
 			continue
+		}
+
+		if strings.Contains(err.Error(), "duplicate transaction") {
+			c.JSON(http.StatusConflict, gin.H{"message": "Эта транзакция уже была обработана"})
+			return
 		}
 
 		// Если это ошибка бизнес-логики (нет денег), выходим из цикла сразу

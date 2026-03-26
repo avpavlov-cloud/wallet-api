@@ -20,7 +20,8 @@ type CreateAccountRequest struct {
 
 // TransferRequest для валидации перевода
 type TransferRequest struct {
-	FromAccountID int64   `json:"from_account_id" binding:"required"`
-	ToAccountID   int64   `json:"to_account_id" binding:"required"`
-	Amount        float64 `json:"amount" binding:"required,gt=0"`
+	FromAccountID  int64   `json:"from_account_id" binding:"required"`
+	ToAccountID    int64   `json:"to_account_id" binding:"required"`
+	Amount         float64 `json:"amount" binding:"required,gt=0"`
+	IdempotencyKey string  `json:"idempotency_key" binding:"required,uuid"` // Обязательный UUID
 }
