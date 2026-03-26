@@ -163,8 +163,24 @@ func (s *Server) TransferHandler(c *gin.Context) {
 			continue
 		}
 
+		// Внутри цикла Retry, если поймали ошибку дубликата:
 		if strings.Contains(err.Error(), "duplicate transaction") {
-			c.JSON(http.StatusConflict, gin.H{"message": "Эта транзакция уже была обработана"})
+			// 1. Ищем ID уже созданной транзакции по ключу
+			var existingID int64
+			err := s.DbPool.QueryRow(c.Request.Context(),
+				"SELECT id FROM transactions WHERE idempotency_key = $1",
+				req.IdempotencyKey).Scan(&existingID)
+
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "could not retrieve existing transaction"})
+				return
+			}
+
+			// 2. Возвращаем 200 OK, как будто всё только что произошло
+			c.JSON(http.StatusOK, gin.H{
+				"message":        "transfer successful (idempotent)",
+				"transaction_id": existingID,
+			})
 			return
 		}
 
