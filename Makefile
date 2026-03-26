@@ -10,3 +10,9 @@ migrate-down:
 
 test:
 	docker compose run --rm app go test -v ./...
+
+# Запуск тестов с генерацией профиля покрытия
+test-coverage:
+	docker compose exec app go test -v -coverprofile=coverage.out ./...
+	# Превращаем бинарный отчет в HTML (опционально, если есть go локально)
+	go tool cover -html=coverage.out -o coverage.html

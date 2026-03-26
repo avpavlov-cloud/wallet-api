@@ -39,3 +39,8 @@ docker compose logs -f app
 ```bash
 docker compose exec app go test -v ./...
 ```
+
+Выполнение тестов покрытия тестами
+```bash
+make test-coverage
+```
