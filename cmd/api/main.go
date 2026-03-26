@@ -87,42 +87,59 @@ func main() {
 			return
 		}
 
-		// Начинаем транзакцию (Atomicity)
+		// Защита от перевода самому себе
+		if req.FromAccountID == req.ToAccountID {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "cannot transfer to the same account"})
+			return
+		}
+
 		tx, err := dbPool.Begin(context.Background())
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not start transaction"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "tx failed"})
 			return
 		}
-		// Если функция завершится с ошибкой, транзакция откатится автоматически
 		defer tx.Rollback(context.Background())
 
-		// 1. Снимаем деньги (Postgres проверит CHECK(balance >= 0) автоматически)
-		// Используем FOR UPDATE, чтобы заблокировать строку от изменений другими запросами (Isolation)
+		// --- МЕХАНИЗМ СОРТИРОВКИ ID ---
+		firstID, secondID := req.FromAccountID, req.ToAccountID
+		if firstID > secondID {
+			firstID, secondID = secondID, firstID
+		}
+
+		// Сначала блокируем (SELECT FOR UPDATE) "меньший" ID, затем "больший"
+		// Это гарантирует, что любая другая транзакция по этим ID пойдет по тому же пути
+		_, err = tx.Exec(context.Background(), "SELECT id FROM accounts WHERE id = $1 FOR UPDATE", firstID)
+		_, err = tx.Exec(context.Background(), "SELECT id FROM accounts WHERE id = $1 FOR UPDATE", secondID)
+		// ------------------------------
+
+		// Теперь выполняем саму логику списания/зачисления
+		// Снимаем деньги
 		res, err := tx.Exec(context.Background(),
-			"UPDATE accounts SET balance = balance - $1 WHERE id = $2", req.Amount, req.FromAccountID)
+			"UPDATE accounts SET balance = balance - $1 WHERE id = $2 AND balance >= $1",
+			req.Amount, req.FromAccountID)
 
 		if err != nil || res.RowsAffected() == 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "insufficient funds or sender not found"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "insufficient funds or sender error"})
 			return
 		}
 
-		// 2. Зачисляем деньги
+		// Зачисляем деньги
 		res, err = tx.Exec(context.Background(),
-			"UPDATE accounts SET balance = balance + $1 WHERE id = $2", req.Amount, req.ToAccountID)
+			"UPDATE accounts SET balance = balance + $1 WHERE id = $2",
+			req.Amount, req.ToAccountID)
 
 		if err != nil || res.RowsAffected() == 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "receiver not found"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "receiver error"})
 			return
 		}
 
-		// 3. Записываем историю (Durability)
-		_, err = tx.Exec(context.Background(),
+		// Записываем лог
+		_, _ = tx.Exec(context.Background(),
 			"INSERT INTO transactions (from_account_id, to_account_id, amount) VALUES ($1, $2, $3)",
 			req.FromAccountID, req.ToAccountID, req.Amount)
 
-		// Фиксируем все изменения (Commit)
 		if err := tx.Commit(context.Background()); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to commit transaction"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "commit failed"})
 			return
 		}
 
