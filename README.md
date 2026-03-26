@@ -80,3 +80,5 @@ docker exec -it wallet-api-postgres-1 psql -U user -d wallet_db -c "SELECT id, o
 ```bash
 docker exec -it wallet-api-postgres-1 psql -U user -d wallet_db -c "\d outbox_events"
 ```
+
+Чтобы проверить состояние сереров нужно выполнить `docker compose ps` и посмотреть на текст рядом со статусом `STATUS`

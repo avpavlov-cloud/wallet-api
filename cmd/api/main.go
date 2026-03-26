@@ -26,6 +26,13 @@ import (
 func SetupRouter(pool *pgxpool.Pool) *gin.Engine {
 	server := handlers.NewServer(pool)
 	r := gin.Default()
+
+	// Публичный эндпоинт для Docker/Kubernetes
+	r.GET("/health", func(c *gin.Context) {
+		// Здесь можно добавить проверку связи с БД: pool.Ping()
+		c.Status(http.StatusOK)
+	})
+
 	p := ginprometheus.NewPrometheus("gin")
 	p.Use(r)
 

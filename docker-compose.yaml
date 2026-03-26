@@ -10,9 +10,14 @@ services:
       POSTGRES_DB: wallet_db
     ports:
       - "5432:5432"
-    healthcheck: # Добавляем проверку готовности базы
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G      # Базе обычно нужно больше памяти для кэша индексов
+    healthcheck:
       test: ["CMD-SHELL", "pg_isready -U user -d wallet_db"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 5
 
@@ -34,6 +39,19 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'     # Не более 50% одного ядра процессора
+          memory: 512M    # Не более 512 МБ оперативной памяти
+        reservations:
+          memory: 128M    # Гарантированный минимум памяти
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s  
     env_file:
       - .env 
     ports:
